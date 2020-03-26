@@ -10,6 +10,7 @@ import pytesseract
 import argparse
 import cv2
 import os
+import time
 
 def decode_predictions(scores, geometry):
     # grab the number of rows and columns from the scores volume, then
@@ -126,6 +127,7 @@ boxes = non_max_suppression(np.array(rects), probs=confidences)
 results = []
 
 # loop over the bounding boxes
+startTime = int(round(time.time() * 1000))
 for (startX, startY, endX, endY) in boxes:
     # scale the bounding box coordinates based on the respective
     # ratios
@@ -163,6 +165,9 @@ for (startX, startY, endX, endY) in boxes:
 
 # sort the results bounding box coordinates from top to bottom
 results = sorted(results, key=lambda r:r[0][1])
+
+endTime = int(round(time.time() * 1000)) - startTime
+print("Processing time: ", endTime)
 
 # loop over the results
 count = 1

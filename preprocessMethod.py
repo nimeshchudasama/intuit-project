@@ -78,7 +78,7 @@ def runPreprocess(image_dir):
         startTime = int(round(time.time() * 1000))
         # Open the image file
         tempImage = cv2.imread(images[i])
-        
+        print(images[i])
         
         ratio = tempImage.shape[0] / 500.0
         orig = tempImage.copy()

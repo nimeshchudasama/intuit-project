@@ -70,7 +70,7 @@ def runPreprocess(image_dir):
     
     # Load intermediate set into images list
     for i in range(imageCount):
-        images.append(str(image_dir) + "/W2_XL_input_noisy_" + str(1000 + i) + ".jpg")
+        images.append(str(image_dir) + "/W2_XL_input_noisy_" + str(1000 + i) + "")
         
         
     # Preprocess the images and store them in a temp list

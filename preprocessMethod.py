@@ -2,9 +2,14 @@
 # Runs a preprocessing method against the intermediate dataset and outputs them
 # into the "preprocessed" folder
 
+# Denoising
+# https://docs.opencv.org/3.4/d5/d69/tutorial_py_non_local_means.html
+
+import cv2 as cv
+import numpy as np
 import time
 import os
-from PIL import Image
+from matplotlib import pyplot as plt
 
 
 def runPreprocess(image_dir):
@@ -22,11 +27,10 @@ def runPreprocess(image_dir):
     for i in range(len(images)):
         startTime = int(round(time.time() * 1000))
         # Open the image file
-        tempImage = Image.open(images[i])
+        tempImage = cv.imread(images[i])
         
         # Do the preprocessing stuff here
-        
-        
+        tempImage = cv.fastNlMeansDenoisingColored(tempImage, None, 10, 10, 7, 21)
         
         # The preprocesed images are saved temporarily in memory instead of written into output directory
         # so calculating the actual processing time won't be affected
@@ -57,7 +61,7 @@ def main():
         
     for i in range(len(processedImages)):
         tempImage = processedImages[i]
-        tempImage.save(output_dir + "/W2_XL_input_noisy_" + str(1000 + i) + ".jpg")
+        cv.imwrite(output_dir + "/W2_XL_input_noisy_" + str(1000 + i) + ".jpg", tempImage)
         
     print("Saved processed images to results directory")
 

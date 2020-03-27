@@ -86,7 +86,6 @@ def runPreprocess(image_dir):
         gray = cv2.cvtColor(tempImage, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (5, 5), 0)
         edged = cv2.Canny(gray, 75, 200)
-
         cnts = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         cnts = imutils.grab_contours(cnts)
         cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:5]
@@ -135,7 +134,7 @@ def main():
 
     for i in range(len(processedImages)):
         tempImage = processedImages[i]
-        tempImage.save(output_dir + "/W2_XL_input_noisy_" + str(1000 + i) + ".jpg")
+        cv2.imwrite(output_dir + "/W2_XL_input_noisy_" + str(1000 + i) + ".jpg",tempImage)
 
     print("Saved processed images to results directory")
 

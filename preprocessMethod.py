@@ -4,66 +4,18 @@
 import numpy as np
 import cv2
 import time
+import math
 import os
 from PIL import Image
 import imutils
 from skimage.filters import threshold_local
+import matplotlib.pyplot as plt
 
+def histogram_equalize(img):
+    img_yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+    img_yuv[:,:,0] = cv2.equalizeHist(img_yuv[:,:,0])
 
-def order_points(pts):
-    # initialzie a list of coordinates that will be ordered
-    # such that the first entry in the list is the top-left,
-    # the second entry is the top-right, the third is the
-    # bottom-right, and the fourth is the bottom-left
-    rect = np.zeros((4, 2), dtype="float32")
-    # the top-left point will have the smallest sum, whereas
-    # the bottom-right point will have the largest sum
-    s = pts.sum(axis=1)
-    rect[0] = pts[np.argmin(s)]
-    rect[2] = pts[np.argmax(s)]
-    # now, compute the difference between the points, the
-    # top-right point will have the smallest difference,
-    # whereas the bottom-left will have the largest difference
-    diff = np.diff(pts, axis=1)
-    rect[1] = pts[np.argmin(diff)]
-    rect[3] = pts[np.argmax(diff)]
-    # return the ordered coordinates
-    return rect
-
-
-def four_point_transform(image, pts):
-    # obtain a consistent order of the points and unpack them
-    # individually
-    rect = order_points(pts)
-    (tl, tr, br, bl) = rect
-    # compute the width of the new image, which will be the
-    # maximum distance between bottom-right and bottom-left
-    # x-coordiates or the top-right and top-left x-coordinates
-    widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
-    widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
-    maxWidth = max(int(widthA), int(widthB))
-    # compute the height of the new image, which will be the
-    # maximum distance between the top-right and bottom-right
-    # y-coordinates or the top-left and bottom-left y-coordinates
-    heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
-    heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
-    maxHeight = max(int(heightA), int(heightB))
-    # now that we have the dimensions of the new image, construct
-    # the set of destination points to obtain a "birds eye view",
-    # (i.e. top-down view) of the image, again specifying points
-    # in the top-left, top-right, bottom-right, and bottom-left
-    # order
-    dst = np.array([
-        [0, 0],
-        [maxWidth - 1, 0],
-        [maxWidth - 1, maxHeight - 1],
-        [0, maxHeight - 1]], dtype="float32")
-    # compute the perspective transform matrix and then apply it
-    M = cv2.getPerspectiveTransform(rect, dst)
-    warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
-    # return the warped image
-    return warped
-
+    return cv2.cvtColor(img_yuv, cv2.COLOR_YUV2BGR)
 
 def runPreprocess(image_dir):
     imageCount = 100
@@ -74,41 +26,90 @@ def runPreprocess(image_dir):
     # Load intermediate set into images list
     for i in range(imageCount):
         images.append(str(image_dir) + "/W2_XL_input_noisy_" + str(1000 + i) + ".jpg")
-
+    count = 0
     # Preprocess the images and store them in a temp list
     for i in range(len(images)):
         startTime = int(round(time.time() * 1000))
         # Open the image file
-        tempImage = cv2.imread(images[i])
-        ratio = tempImage.shape[0] / 500.0
-        orig = tempImage.copy()
-        tempImage = imutils.resize(tempImage, height=500)
-        gray = cv2.cvtColor(tempImage, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (5, 5), 0)
-        edged = cv2.Canny(gray, 75, 200)
-        cnts = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        cnts = imutils.grab_contours(cnts)
-        cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:5]
-        # loop over the contours
-        for c in cnts:
-            # approximate the contour
-            peri = cv2.arcLength(c, True)
-            approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-            # if our approximated contour has four points, then we
-            # can assume that we have found our screen
-            if len(approx) == 4:
-                screenCnt = approx
-                break
+        img = cv2.imread(images[i])
 
-        warped = four_point_transform(orig, screenCnt.reshape(4, 2) * ratio)
-        warped = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
 
-        T = threshold_local(warped, 11, offset=10, method="gaussian")
-        warped = (warped > T).astype("uint8") * 255
+
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (3, 3), 0)
+        thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+        kernel = np.ones((7, 7), np.uint8)
+        morph = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        morph = cv2.morphologyEx(morph, cv2.MORPH_OPEN, kernel)
+        contours = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours = contours[0] if len(contours) == 2 else contours[1]
+        area_thresh = 0
+        for c in contours:
+            area = cv2.contourArea(c)
+            if area > area_thresh:
+                area_thresh = area
+                big_contour = c
+        page = np.zeros_like(img)
+        cv2.drawContours(page, [big_contour], 0, (255, 255, 255), -1)
+        peri = cv2.arcLength(big_contour, True)
+        corners = cv2.approxPolyDP(big_contour, 0.04 * peri, True)
+
+        result = img.copy()
+        cv2.polylines(result, [corners], True, (0, 0, 255), 10, cv2.LINE_AA)
+
+        # for simplicity get average of top/bottom side widths and average of left/right side heights
+        # note: probably better to get average of horizontal lengths and of vertical lengths
+        width = 0.5 * ((corners[0][0][0] - corners[1][0][0]) + (corners[3][0][0] - corners[2][0][0]))
+        height = 0.5 * ((corners[2][0][1] - corners[1][0][1]) + (corners[3][0][1] - corners[0][0][1]))
+        width = np.int0(width)
+        height = np.int0(height)
+
+        # reformat input corners to x,y list
+        icorners = []
+        for corner in corners:
+            pt = [corner[0][0], corner[0][1]]
+            icorners.append(pt)
+        icorners = np.float32(icorners)
+
+        # get corresponding output corners from width and height
+        ocorners = [[width, 0], [0, 0], [0, height], [width, height]]
+        ocorners = np.float32(ocorners)
+
+        count += 1
+        print("iteration" + str(count))
+        print("Before" + str(len(ocorners)) + "||" + str(len(icorners)))
+
+        while (len(ocorners) != 4 and len(icorners)!= 4):
+            if len(ocorners) > 4:
+                np.delete(ocorners,len(ocorners)-1)
+            if len(icorners) > 4:
+                np.delete(icorners,len(icorners)-1)
+        # get perspective tranformation matrix
+        print("After" + str(len(ocorners)) + "||" + str(len(icorners)))
+
+        M = cv2.getPerspectiveTransform(icorners, ocorners)
+
+        # do perspective
+        warped = cv2.warpPerspective(img, M, (width, height))
+
+        rgb_planes = cv2.split(warped)
+
+        result_planes = []
+        result_norm_planes = []
+        for plane in rgb_planes:
+            dilated_img = cv2.dilate(plane, np.ones((7, 7), np.uint8))
+            bg_img = cv2.medianBlur(dilated_img, 21)
+            diff_img = 255 - cv2.absdiff(plane, bg_img)
+            norm_img = cv2.normalize(diff_img, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8UC1)
+            result_norm_planes.append(norm_img)
+
+        result = cv2.merge(result_norm_planes)
+
+
 
         # The preprocesed images are saved temporarily in memory instead of written into output directory
         # so calculating the actual processing time won't be affected
-        tempImages.append(tempImage)
+        tempImages.append(result)
 
         # Record elapsed processing time for the image
         times.append(int(round(time.time() * 1000)) - startTime)
@@ -118,6 +119,29 @@ def runPreprocess(image_dir):
 
     return tempImages
 
+
+def unwarp(img, src, dst, testing):
+    h, w = img.shape[:2]
+    # use cv2.getPerspectiveTransform() to get M, the transform matrix, and Minv, the inverse
+    M = cv2.getPerspectiveTransform(src, dst)
+    # use cv2.warpPerspective() to warp your image to a top-down view
+    warped = cv2.warpPerspective(img, M, (w, h), flags=cv2.INTER_LINEAR)
+
+    if testing:
+        f, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
+        f.subplots_adjust(hspace=.2, wspace=.05)
+        ax1.imshow(img)
+        x = [src[0][0], src[2][0], src[3][0], src[1][0], src[0][0]]
+        y = [src[0][1], src[2][1], src[3][1], src[1][1], src[0][1]]
+        ax1.plot(x, y, color='red', alpha=0.4, linewidth=3, solid_capstyle='round', zorder=2)
+        ax1.set_ylim([h, 0])
+        ax1.set_xlim([0, w])
+        ax1.set_title('Original Image', fontsize=30)
+        ax2.imshow(cv2.flip(warped, 1))
+        ax2.set_title('Unwarped Image', fontsize=30)
+        plt.show()
+    else:
+        return warped, M
 
 def main():
     image_dir = "intermediate"

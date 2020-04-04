@@ -1,8 +1,8 @@
-mport cv2
+import cv2
 import numpy as np
 
 # read image
-img = cv2.imread("efile.jpg")
+img = cv2.imread('imagename.jpg')
 
 # convert img to grayscale
 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
